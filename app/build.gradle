@@ -17,4 +17,9 @@ android {
         }
     }
     sourceSets { main { res.srcDirs = ['src/main/res', 'src/main/res/layouts'] } }
+
+    dependencies{
+
+        compile 'com.android.support:recyclerview-v7:26.1.0'
+    }
 }

@@ -33,16 +33,29 @@ import android.text.format.Time;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.widget.EditText;
+import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.List;
 
 
-public class Beam extends Activity implements CreateNdefMessageCallback,
+public class Beam extends Activity implements CreateNdefMessageCallback, DialogUsername.DialogUsernameListener,
         OnNdefPushCompleteCallback {
     NfcAdapter mNfcAdapter;
     TextView mInfoText;
+    EditText edt_msg;
+
+    ListView listView;
+    List<MessageNFC> messages;
+    MessageAdapter adapter;
+
+    String utilisateur = "Luchard";
+
+
     private static final int MESSAGE_SENT = 1;
 
     @Override
@@ -51,16 +64,39 @@ public class Beam extends Activity implements CreateNdefMessageCallback,
         setContentView(R.layout.main);
 
         mInfoText = (TextView) findViewById(R.id.textView);
+        edt_msg = (EditText) findViewById(R.id.edt_msg);
+
+        listView = (ListView) findViewById(R.id.listview);
+
+        messages = new ArrayList<>();
+        adapter = new MessageAdapter(this, android.R.layout.simple_list_item_1, messages);
+
+        listView.setAdapter(adapter);
+
+
+
+        adapter.notifyDataSetChanged();
+
         // Check for available NFC Adapter
         mNfcAdapter = NfcAdapter.getDefaultAdapter(this);
         if (mNfcAdapter == null) {
-            mInfoText = (TextView) findViewById(R.id.textView);
             mInfoText.setText("NFC is not available on this device.");
+            edt_msg.setEnabled(false);
+
+            messages.add(new MessageNFC("System", mInfoText.getText().toString(), "Today"));
+            adapter.notifyDataSetChanged();
+
+        }else{
+            // Register callback to set NDEF message
+            mNfcAdapter.setNdefPushMessageCallback(this, this);
+            // Register callback to listen for message-sent success
+            mNfcAdapter.setOnNdefPushCompleteCallback(this, this);
+
+            if(utilisateur.equals(NfcAdapter.EXTRA_ID) || utilisateur == null){
+                dialogFragment();
+            }
+
         }
-        // Register callback to set NDEF message
-        mNfcAdapter.setNdefPushMessageCallback(this, this);
-        // Register callback to listen for message-sent success
-        mNfcAdapter.setOnNdefPushCompleteCallback(this, this);
     }
 
 
@@ -71,8 +107,21 @@ public class Beam extends Activity implements CreateNdefMessageCallback,
     public NdefMessage createNdefMessage(NfcEvent event) {
         Time time = new Time();
         time.setToNow();
-        String text = ("Beam me up!\n\n" +
+        String text = (utilisateur + "_" +  edt_msg.getText() + "_" +
                 "Beam Time: " + time.format("%H:%M:%S"));
+
+        messages.add(new MessageNFC("Me", edt_msg.getText().toString(), time.format("%H:%M:%S")));
+
+        this.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                adapter.notifyDataSetChanged();
+            }
+        });
+
+
+
+
         NdefMessage msg = new NdefMessage(
                 new NdefRecord[] { createMimeRecord(
                         "application/com.example.android.beam", text.getBytes())
@@ -86,6 +135,16 @@ public class Beam extends Activity implements CreateNdefMessageCallback,
           */
           //,NdefRecord.createApplicationRecord("com.example.android.beam")
         });
+
+        this.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                edt_msg.setText("");
+            }
+        });
+
+
+
         return msg;
     }
 
@@ -136,6 +195,18 @@ public class Beam extends Activity implements CreateNdefMessageCallback,
         NdefMessage msg = (NdefMessage) rawMsgs[0];
         // record 0 contains the MIME type, record 1 is the AAR, if present
         mInfoText.setText(new String(msg.getRecords()[0].getPayload()));
+
+        try {
+            String[] m = mInfoText.getText().toString().split("_");
+
+            messages.add(new MessageNFC(m[0], m[1], m[2]));
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            messages.add(new MessageNFC("MBDS", mInfoText.getText().toString(), "Today"));
+        }
+
+        adapter.notifyDataSetChanged();
     }
 
     /**
@@ -168,8 +239,22 @@ public class Beam extends Activity implements CreateNdefMessageCallback,
                 Intent intent = new Intent(Settings.ACTION_NFCSHARING_SETTINGS);
                 startActivity(intent);
                 return true;
+            case R.id.menu_username:
+                dialogFragment();
+                return true;
             default:
                 return super.onOptionsItemSelected(item);
         }
+    }
+
+    void dialogFragment(){
+        DialogUsername dialog = DialogUsername.newInstance(utilisateur);
+
+        dialog.show(getFragmentManager(), "Username");
+    }
+
+    @Override
+    public void onUsernameSet(String username) {
+        this.utilisateur = username;
     }
 }
